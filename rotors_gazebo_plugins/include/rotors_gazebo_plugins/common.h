@@ -26,6 +26,10 @@
 #include <gazebo/gazebo.hh>
 #include <tinyxml.h>
 
+#include <vector>
+#include <deque>
+#include <cmath>
+
 namespace gazebo {
 
 //===============================================================================================//
@@ -180,6 +184,66 @@ class FirstOrderFilter {
   double timeConstantUp_;
   double timeConstantDown_;
   T previousState_;
+};
+
+template <typename T>
+class ThirdOrderModel {
+
+ public:
+  ThirdOrderModel(double num, std::vector<double> den, std::deque<T> inputStateHistory, std::deque<T> outputStateHistory):
+      num_(num),
+      den_(den),
+      inputStateHistory_(inputStateHistory),
+      outputStateHistory_(outputStateHistory) {}
+
+  void CalculateDTcoeffsFromCT(double samplingTime) {
+
+    double Ts = samplingTime;
+    a3 = den_.at(2)*std::pow(Ts, 3.0) + 2*den_.at(1)*std::pow(Ts, 2.0) + den_.at(0)*Ts + 8;
+    a2 = 3*den_.at(2)*std::pow(Ts, 3.0) + 2*den_.at(1)*std::pow(Ts, 2.0) - 4*den_.at(0)*Ts - 24;
+    a1 = 3*den_.at(2)*std::pow(Ts, 3.0) - 2*den_.at(1)*std::pow(Ts, 2.0) - 4*den_.at(0)*Ts + 24;
+    a0 = den_.at(2)*std::pow(Ts, 3.0) - 2*den_.at(1)*std::pow(Ts, 2.0) + 4*den_.at(0)*Ts - 8;
+
+    b3 = 4*num_*Ts;
+    b2 = -4*num_*Ts;
+    b1 = -4*num_*Ts;
+    b0 = 4*num_*Ts;
+
+    std::cout << "---------------------------------------------------" << std::endl;
+    std::cout << "a: " << a3 << " " << a2 << " " << a1 << " " << a0 << std::endl;
+    std::cout << "b: " << b3 << " " << b2 << " " << b1 << " " << b0 << std::endl;
+    std::cout << "---------------------------------------------------" << std::endl;
+
+  }
+
+  T updateModel(T inputState, double samplingTime) {
+
+    T outputState;
+
+    CalculateDTcoeffsFromCT(samplingTime);
+    
+    outputState = (1.0/a3)*(-a2*outputStateHistory_.at(0) -a1*outputStateHistory_.at(1) 
+                            -a0*outputStateHistory_.at(2) + b3*inputStateHistory_.at(0)
+                            + b2*inputStateHistory_.at(1) + b1*inputStateHistory_.at(2)
+                            + b0*inputStateHistory_.at(3) );
+
+    outputStateHistory_.pop_back();
+    outputStateHistory_.push_front(outputState);
+    inputStateHistory_.pop_back();
+    inputStateHistory_.push_front(inputState);
+
+    return outputState;
+
+  }
+
+  ~ThirdOrderModel() {}
+
+ protected:
+  const double num_;
+  const std::vector<double> den_;
+  std::deque<T> inputStateHistory_;
+  std::deque<T> outputStateHistory_;
+  double a3, a2, a1, a0, b3, b2, b1, b0;
 };
 
 /// \brief    Computes a quaternion from the 3-element small angle approximation theta.

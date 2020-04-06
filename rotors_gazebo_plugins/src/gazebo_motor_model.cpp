@@ -125,6 +125,7 @@ void GazeboMotorModel::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
 
   // Set up joint control PID to control joint.
   if (motor_type_ == MotorType::kPosition) {
+    double a2 = 1, a1 = 0, a0 = 0, b0 = 0;
     if (_sdf->HasElement("joint_control_pid")) {
       sdf::ElementPtr pid = _sdf->GetElement("joint_control_pid");
       double p = 0;
@@ -149,11 +150,25 @@ void GazeboMotorModel::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
       if (pid->HasElement("cmdMin"))
         cmdMin = pid->Get<double>("cmdMin");
       pids_.Init(p, i, d, iMax, iMin, cmdMax, cmdMin);
+      if (pid->HasElement("a2"))
+        a2 = pid->Get<double>("a2");      
+      if (pid->HasElement("a1"))
+        a1 = pid->Get<double>("a1");      
+      if (pid->HasElement("a0"))
+        a0 = pid->Get<double>("a0");      
+      if (pid->HasElement("b0"))
+        b0 = pid->Get<double>("b0");
     } else {
       pids_.Init(0, 0, 0, 0, 0, 0, 0);
       gzerr << "[gazebo_motor_model] PID values not found, Setting all values "
                "to zero!\n";
     }
+      // Third order model
+      std::vector<double> den = {a2,a1,a0};
+      std::deque<double> inputHistory(4,0);
+      std::deque<double> outputHistory(3,0);
+      servo_model_.reset( new ThirdOrderModel<double>(b0, den, inputHistory, outputHistory));
+
   } else {
     pids_.Init(0, 0, 0, 0, 0, 0, 0);
   }
@@ -206,6 +221,7 @@ void GazeboMotorModel::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
   rotor_velocity_filter_.reset(
       new FirstOrderFilter<double>(
           time_constant_up_, time_constant_down_, ref_motor_input_));
+
 }
 
 // This gets called by the world update start event.
@@ -414,8 +430,11 @@ void GazeboMotorModel::UpdateForcesAndMoments() {
 
       // Calculate derivative contribution to command
       dTerm = pids_.GetDGain() * dErr;
-      double force = -pTerm - dTerm;
+      // double force = -pTerm - dTerm;
       
+      // Use third order model
+      double force;
+      force = servo_model_->updateModel(err, sampling_time_);
       joint_->SetForce(0, force);
       break;
     }

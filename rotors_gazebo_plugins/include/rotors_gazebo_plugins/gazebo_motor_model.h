@@ -24,6 +24,8 @@
 
 // SYSTEM
 #include <stdio.h>
+#include <vector>
+#include <deque>
 
 // 3RD PARTY
 #include <boost/bind.hpp>
@@ -186,6 +188,7 @@ class GazeboMotorModel : public MotorModel, public ModelPlugin {
   void WindSpeedCallback(GzWindSpeedMsgPtr& wind_speed_msg);
 
   std::unique_ptr<FirstOrderFilter<double>> rotor_velocity_filter_;
+  std::unique_ptr<ThirdOrderModel<double>> servo_model_;
   ignition::math::Vector3d wind_speed_W_;
 };
 
